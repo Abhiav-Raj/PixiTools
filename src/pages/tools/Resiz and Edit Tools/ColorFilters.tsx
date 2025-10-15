@@ -546,7 +546,7 @@ const ColorFilters = () => {
                     variant="outline"
                     onClick={() => applyPreset("bw")}
                   >
-                    B&am p;W Preset
+                    Black & White Preset
                   </Button>
                   <Button
                     size="sm"
