@@ -113,18 +113,19 @@ export const getImageDimensions = (
     img.src = URL.createObjectURL(file);
   });
 
-  export const imageToPDF = async (file: File): Promise<Blob> => {
+/** Convert image to PDF */
+export const imageToPDF = async (file: File): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
 
     img.onload = () => {
       try {
         const pdf = new jsPDF();
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
 
         if (!ctx) {
-          reject(new Error('Failed to create canvas context'));
+          reject(new Error("Failed to create canvas context"));
           return;
         }
 
@@ -132,9 +133,7 @@ export const getImageDimensions = (
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.9);
-
-        // Calculate dimensions to fit page
+        const imgData = canvas.toDataURL("image/jpeg", 0.9);
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
         const imgAspectRatio = img.width / img.height;
@@ -151,22 +150,21 @@ export const getImageDimensions = (
 
         const xOffset = (pdfWidth - finalWidth) / 2;
         const yOffset = (pdfHeight - finalHeight) / 2;
+        pdf.addImage(imgData, "JPEG", xOffset, yOffset, finalWidth, finalHeight);
 
-        pdf.addImage(imgData, 'JPEG', xOffset, yOffset, finalWidth, finalHeight);
-
-        const pdfBlob = pdf.output('blob');
+        const pdfBlob = pdf.output("blob");
         resolve(pdfBlob);
       } catch (error) {
         reject(error);
       }
     };
 
-    img.onerror = () => reject(new Error('Failed to load image'));
+    img.onerror = () => reject(new Error("Failed to load image"));
     img.src = URL.createObjectURL(file);
   });
 };
 
-/** Add watermark: single-position or tiled diagonal “all-over” */
+/** Add watermark */
 export const addWatermarkToImage = async (
   file: File,
   watermarkText: string,
@@ -199,20 +197,14 @@ export const addWatermarkToImage = async (
         return reject(new Error("Canvas context not available"));
       }
 
-      // Draw original
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
       const base = Math.min(canvas.width, canvas.height);
       const fontSize = Math.max(14, Math.round(base * 0.05));
 
       if (position === "all-over") {
-        // Tiled, diagonal watermark
         const tile = document.createElement("canvas");
         const tctx = tile.getContext("2d");
-        if (!tctx) {
-          cleanup();
-          return reject(new Error("Tile context not available"));
-        }
+        if (!tctx) return reject(new Error("Tile context not available"));
 
         tctx.font = `${fontSize}px sans-serif`;
         tctx.textAlign = "center";
@@ -227,7 +219,6 @@ export const addWatermarkToImage = async (
         tile.width = tileW;
         tile.height = tileH;
 
-        // Re-apply styles after resize
         tctx.font = `${fontSize}px sans-serif`;
         tctx.textAlign = "center";
         tctx.textBaseline = "middle";
@@ -241,25 +232,20 @@ export const addWatermarkToImage = async (
         tctx.restore();
 
         const pattern = ctx.createPattern(tile, "repeat");
-        if (!pattern) {
-          cleanup();
-          return reject(new Error("Failed to create pattern"));
-        }
+        if (!pattern) return reject(new Error("Failed to create pattern"));
 
         ctx.save();
         ctx.fillStyle = pattern as any;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
       } else {
-        // Single positioned text
         ctx.font = `${fontSize}px sans-serif`;
         ctx.fillStyle = color;
-        ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+        ctx.globalAlpha = opacity;
 
         const textWidth = ctx.measureText(watermarkText).width;
         let x = 10;
         let y = canvas.height - 10;
-
         if (position.includes("top")) y = 20 + fontSize;
         if (position.includes("right")) x = canvas.width - textWidth - 10;
         if (position === "center") {
@@ -271,20 +257,14 @@ export const addWatermarkToImage = async (
         ctx.globalAlpha = 1;
       }
 
-      // Build output file name and type
-      const originalExt = file.name.match(/\.[^/.]+$/)?.[0] ?? ".png";
-      const baseName = file.name.replace(/\.[^/.]+$/, "");
-      const suffix = position === "all-over" ? "_watermarked_tiled" : "_watermarked";
-      const outName = `${baseName}${suffix}${originalExt}`;
-      const targetType = file.type || "image/png";
-
+      const outName = file.name.replace(/\.[^/.]+$/, "_watermarked.png");
       canvas.toBlob(
         (blob) => {
           cleanup();
           if (!blob) return reject(new Error("Failed to add watermark"));
-          resolve(new File([blob], outName, { type: targetType }));
+          resolve(new File([blob], outName, { type: file.type }));
         },
-        targetType,
+        file.type,
         0.9
       );
     };
@@ -296,4 +276,36 @@ export const addWatermarkToImage = async (
 
     img.src = URL.createObjectURL(file);
   });
+};
+
+/** 🆕 Real-time preview with smooth scroll animation */
+export const showImagePreviewWithScroll = (file: File): void => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let previewContainer = document.getElementById("image-preview-container");
+    if (!previewContainer) {
+      previewContainer = document.createElement("div");
+      previewContainer.id = "image-preview-container";
+      previewContainer.style.cssText = `
+        margin-top: 40px;
+        text-align: center;
+        transition: all 0.8s ease-in-out;
+      `;
+      document.body.appendChild(previewContainer);
+    }
+
+    previewContainer.innerHTML = `
+      <h3 style="margin-bottom: 10px; font-weight: 600;">Preview</h3>
+      <img id="image-preview" src="${reader.result}" 
+        style="max-width: 70%; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transform: scale(0.9); transition: all 0.6s ease;">
+    `;
+
+    const img = document.getElementById("image-preview") as HTMLImageElement;
+    setTimeout(() => {
+      img.style.opacity = "1";
+      img.style.transform = "scale(1)";
+      previewContainer?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+  };
+  reader.readAsDataURL(file);
 };
